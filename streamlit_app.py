@@ -4,12 +4,12 @@ import scrapy
 import yfinance as yf
 import streamlit as st
 
-
 # --------------------------------------------------------------------------------------- TICKERS
 data_tickers={'ticker': ["^GSPC","^IBEX"], "nombreTicker": ["SyP_500", "IBEX_35"]}
 df_tickers = pd.DataFrame(data_tickers)
 
 datos_historicos_dict = {}
+
 
 # Iterar sobre los tickers y sus nombres
 for ticker, nombre in zip(data_tickers['ticker'], data_tickers['nombreTicker']):
@@ -36,7 +36,7 @@ cursor.execute('''CREATE TABLE IF NOT EXISTS tickers (ticker TEXT PRIMARY KEY,no
 data_para_insertar = list(df_tickers.itertuples(index=False, name=None))
 
 # Usar executemany para insertar múltiples filas
-cursor.executemany('''INSERT INTO tickers (ticker, nombreTicker)VALUES (?, ?)''', data_para_insertar)
+cursor.executemany('''INSERT OR IGNORE INTO tickers (ticker, nombreTicker)VALUES (?, ?)''', data_para_insertar)
 
 #Iterar sobre los DataFrames en el diccionario y crear tablas
 for nombre in data_tickers['nombreTicker']:
@@ -54,7 +54,7 @@ for nombre in data_tickers['nombreTicker']:
     df_insertar = list(zip(df['Date'], df['Close']))  # Crear tuplas de (fecha, close)
 
     # Usar executemany para insertar los datos en la tabla
-    cursor.executemany(f'''INSERT OR REPLACE INTO {nombre_tabla} (fecha, close) VALUES (?, ?)''', df_insertar)
+    cursor.executemany(f'''INSERT OR IGNORE INTO {nombre_tabla} (fecha, close) VALUES (?, ?)''', df_insertar)
 
 # Guardar los cambios
 conexion.commit()
@@ -98,7 +98,7 @@ query = "SELECT * FROM SyP_500"
 df = pd.read_sql(query, conn)
 
 # Mostrar los datos
-print(df)
+st.write(df)
 
 # Cerrar la conexión a la base de datos
 conn.close()

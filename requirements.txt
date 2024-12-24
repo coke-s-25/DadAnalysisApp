@@ -2,4 +2,3 @@ streamlit
 pandas
 scrapy
 yfinance
-sqlite3

@@ -1,5 +1,7 @@
 [theme]
 base="dark"
+primaryColor="#57b1f7"
+
 
 [server]
 headless=true

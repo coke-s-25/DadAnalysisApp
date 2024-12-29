@@ -79,7 +79,13 @@ conexion.close()
 
 # --------------------------------------------------------------------------------------- VISUALIZACIÓN
 
-
+# Configuración del tema
+st.set_page_config(
+    layout="wide",  # Modo ancho
+    page_title="Dad Analysis App",
+    page_icon="🧮",  # Icono para la página
+    initial_sidebar_state="auto",
+)
 
 st.markdown("""
     <style>
@@ -104,100 +110,131 @@ selected_tickers = st.multiselect(
 )
 
 
-# Crear columnas: una para cada botón y la cuarta para el input del número de meses
-col1, col2, col3, col4 = st.columns(4)
 
-# Si no existe, inicializamos el estado de session_state
-if 'time_option' not in st.session_state:
-    st.session_state.time_option = "Todos los tiempos"
-if 'months_input' not in st.session_state:
-    st.session_state.months_input = 0  # Inicializamos como 0 para "Todos los tiempos"
+# Aplicamos CSS para cambiar el color de fondo de los contenedores
+st.markdown(
+    """
+    <style>
+    /* Estilo para los botones */
+    .stButton>button {
+        background-color:rgb(94, 222, 98); /* Fondo verde para los botones */
+        color: white; /* Texto blanco */
+        border-radius: 5px;
+        border: none;
+        padding: 10px 20px;
+        cursor: pointer;
+    }
 
-# Colocar los botones en sus respectivas columnas
+    .stButton>button:hover {
+        background-color:rgb(51, 119, 54); /* Fondo más oscuro cuando pasa el ratón */
+    }
+    </style>
+""", unsafe_allow_html=True)
+
+
+# Crear las columnas para los botones de selección de tipo de gráfico
+col1, col2, col3 = st.columns(3)
+
+# Inicializar la opción de gráfico si no está definida
+if 'graph_option' not in st.session_state:
+    st.session_state.graph_option = 'Gráfico Lineal'
+
+# Botón para "Gráfico Lineal"
 with col1:
-    if st.button('1 Año'):
-        st.session_state.time_option = "1 Año"
-        st.session_state.months_input = 12  # Reiniciar a 12 meses al seleccionar "1 Año"
+    if st.button('Gráfico Lineal'):
+        st.session_state.graph_option = 'Gráfico Lineal'
+
+# Botón para "Gráfico de Índices"
 with col2:
-    if st.button('5 Años'):
-        st.session_state.time_option = "5 Años"
-        st.session_state.months_input = 60  # Reiniciar a 60 meses al seleccionar "5 Años"
-with col3:
-    if st.button('Todos los tiempos'):
-        st.session_state.time_option = "Todos los tiempos"
-        st.session_state.months_input = 0  # Reiniciar a 0 meses al seleccionar "Todos los tiempos"
-with col4:
-    # Opción para ingresar el número de meses
-    st.session_state.months_input = st.number_input(
-        "Número de meses a graficar", 
-        min_value=0, 
-        max_value=500,  # Máximo 10 años
-        value=st.session_state.months_input,  # Valor por defecto (0 o 12, dependiendo de la selección)
-        step=1          # Paso de 1 mes
+    if st.button('Gráfico de Índices'):
+        st.session_state.graph_option = 'Gráfico de Índices'
+
+# Inicializar start_date si no está definido
+if 'start_date' not in st.session_state:
+    st.session_state.start_date = datetime(1900, 1, 1)
+
+
+# Crear un marcador de lugar para el gráfico
+graph_placeholder = st.empty()
+
+def render_graph(key):
+    # Usar la fecha seleccionada
+    start_date = st.session_state.start_date
+
+    # Conectar a la base de datos
+    conn = sqlite3.connect('macroeconomic_data.db')
+
+    # Crear una figura interactiva
+    fig = go.Figure()
+
+    # Graficar los datos de los índices seleccionados
+    for ticker_nombre in selected_tickers:
+        # Consultar los datos del rango seleccionado
+        query = f"SELECT fecha, close FROM {ticker_nombre} WHERE fecha >= '{start_date.strftime('%Y-%m-%d')}'"
+        df = pd.read_sql(query, conn)
+        df['fecha'] = pd.to_datetime(df['fecha'])
+
+        # Normalizar si se selecciona el gráfico de índices
+        if st.session_state.graph_option == 'Gráfico de Índices':
+            df['close'] = (df['close'] / df['close'].iloc[0]) * 100
+
+        # Obtener la moneda del ticker utilizando yfinance
+        ticker_symbol = data_tickers['ticker'][data_tickers['nombreTicker'].index(ticker_nombre)]
+        ticker_data = yf.Ticker(ticker_symbol)
+        currency = ticker_data.info['currency']
+
+        # Añadir los datos al gráfico
+        fig.add_trace(go.Scatter(
+            x=df['fecha'],
+            y=df['close'],
+            mode='lines',
+            name=f"{ticker_nombre} ({currency})"
+        ))
+
+    # Ajustar el rango de fechas en función del valor de time_option y months_input
+    fig.update_layout(
+        title="Evolución Precio",
+        xaxis_title="Fecha",
+        yaxis_title="Índice Normalizado" if st.session_state.graph_option == 'Gráfico de Índices' else "Precio de Cierre",
+        xaxis=dict(
+            showgrid=True,
+            tickformat="%e %b %Y",  # Muestra día, mes y año
+            rangeslider=dict(visible=True),  # Añadir un slider interactivo para el rango de fechas
+        ),
+        yaxis=dict(
+            showgrid=True
+        ),
+        hovermode="x unified",  # Al pasar el cursor, ver todos los valores en esa fecha
     )
 
-# Si el campo de meses tiene un valor (es decir, no es 0), actualizamos time_option
-if st.session_state.months_input > 0:
-    st.session_state.time_option = f"{st.session_state.months_input} Meses"
+    # Mostrar la gráfica interactiva en el marcador de lugar con una clave única
+    graph_placeholder.plotly_chart(fig, key=key)
+    conn.close()
 
 
-# Establecer el rango de fechas en función del valor de time_option y months_input
-today = datetime.today()
+# Renderizar el gráfico por primera vez con una clave inicial
+render_graph(key="initial_graph")
 
-# Si el número de meses es mayor que 0, usamos ese valor
-if st.session_state.months_input > 0:
-    start_date = today - timedelta(days=st.session_state.months_input * 30)  # Aproximadamente 30 días por mes
-else:
-    # Si "Todos los tiempos" es seleccionado, usamos una fecha muy antigua
-    start_date = datetime(1900, 1, 1)  # Todos los tiempos
-    if st.session_state.time_option == "1 Año":
-        start_date = today - timedelta(days=365)
-    elif st.session_state.time_option == "5 Años":
-        start_date = today - timedelta(days=5 * 365)
+# **Botones y entrada de fecha**
+col1, col2, col3, col4 = st.columns(4)
 
+# Actualizar start_date basado en las interacciones
+with col1:
+    if st.button('1 Año'):
+        st.session_state.start_date = datetime.today() - timedelta(days=365)
 
+with col2:
+    if st.button('5 Años'):
+        st.session_state.start_date = datetime.today() - timedelta(days=5 * 365)
 
-# Conectar a la base de datos
-conn = sqlite3.connect('macroeconomic_data.db')
+with col3:
+    if st.button('Todos los tiempos'):
+        st.session_state.start_date = datetime(1900, 1, 1)
 
-# Crear una figura interactiva
-fig = go.Figure()
+with col4:
+    custom_date = st.date_input("Selecciona la fecha de inicio", st.session_state.start_date)
+    if custom_date != st.session_state.start_date.date():
+        st.session_state.start_date = datetime.combine(custom_date, datetime.min.time())
 
-# Graficar los datos de los índices seleccionados
-for ticker_nombre in selected_tickers:
-    query = f"SELECT fecha, close FROM {ticker_nombre} WHERE fecha >= '{start_date.strftime('%Y-%m-%d')}'"
-    df = pd.read_sql(query, conn)
-    df['fecha'] = pd.to_datetime(df['fecha'])
-    
-    # Obtener la moneda del ticker utilizando yfinance
-    ticker_symbol = data_tickers['ticker'][data_tickers['nombreTicker'].index(ticker_nombre)]
-    ticker_data = yf.Ticker(ticker_symbol)
-    currency = ticker_data.info['currency']
-    
-    # Añadir la línea de datos a la figura
-    fig.add_trace(go.Scatter(x=df['fecha'], y=df['close'], mode='lines', name=f"{ticker_nombre} ({currency})"))
-
-# Ajustar el rango de fechas en función del valor de time_option y months_input
-fig.update_layout(
-    title="Evolución Precio",
-    xaxis_title="Fecha",
-    yaxis_title="Precio de Cierre",
-    xaxis=dict(
-        showgrid=True,
-        tickformat="%b %Y",  # Muestra mes y año
-        rangeslider=dict(visible=True),  # Añadir un slider interactivo para el rango de fechas
-    ),
-    yaxis=dict(
-        showgrid=True
-    ),
-    hovermode="x unified",  # Al pasar el cursor, ver todos los valores en esa fecha
-)
-
-# Mostrar la gráfica interactiva en Streamlit
-st.plotly_chart(fig)
-
-# Cerrar la conexión a la base de datos
-conn.close()
-
-
-
+# Renderizar el gráfico después de las interacciones con una clave actualizada
+render_graph(key="updated_graph")

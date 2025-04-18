@@ -32,7 +32,7 @@ data_tickers_bancos = {
         "BBVA.MC",      # BBVA (España)
         "NDX1.DE",      # Nordea (Finlandia vía Xetra)
         "DANSKE.CO",    # Danske Bank (Dinamarca)
-        "SWEDAS.XC"      # Swedbank (Suecia)
+        "SWEDAS.XD"      # Swedbank (Suecia)
     ],
     'nombreTicker': [
         "HSBC", "Banco_Santander", "BNP_Paribas", "Deutsche_Bank", "ING", "Credit_Agricole",
@@ -344,6 +344,68 @@ if pagina == "📈 Gráficar":
 
     # Renderizar el gráfico después de las interacciones con una clave actualizada
     render_graph(key="updated_graph")
+
+
+    # Sección Resumen
+    if selected_tickers:
+        st.markdown("### 📊 Datos Financieros Clave")
+
+        # Estilos CSS para los boxes
+        st.markdown("""
+            <style>
+            .box-container {
+                border: 1px solid #444;
+                border-radius: 10px;
+                padding: 15px;
+                background-color: #1e1e1e;
+                color: white;
+                text-align: center;
+                margin-bottom: 20px;
+            }
+            .box-title {
+                font-weight: bold;
+                font-size: 18px;
+                margin-bottom: 10px;
+            }
+            .box-item {
+                margin: 5px 0;
+                font-size: 16px;
+            }
+            </style>
+        """, unsafe_allow_html=True)
+
+        # Mostrar de a 3 columnas por fila
+        cols = st.columns(3)
+        for i, nombre in enumerate(selected_tickers):
+            col = cols[i % 3]  # seleccionar columna según posición
+
+            ticker_symbol = df_tickers.loc[df_tickers['nombreTicker'] == nombre, 'ticker'].values[0]
+            ticker_data = yf.Ticker(ticker_symbol)
+
+            try:
+                info = ticker_data.info
+                pb_ratio = info.get('priceToBook', 'N/A')
+                earnings = info.get('netIncomeToCommon', 'N/A')
+                total_assets = info.get('totalAssets', 'N/A')
+
+                html_content = f"""
+                <div class='box-container'>
+                    <div class='box-title'>{nombre} ({ticker_symbol})</div>
+                    <div class='box-item'>📘 P/B Ratio: {pb_ratio}</div>
+                    <div class='box-item'>💰 Earnings After Tax: {earnings}</div>
+                    <div class='box-item'>🏦 Total Assets: {total_assets}</div>
+                </div>
+                """
+
+                col.markdown(html_content, unsafe_allow_html=True)
+
+            except Exception as e:
+                col.warning(f"No se pudo obtener información para {nombre}")
+
+
+
+
+
 
 #if pagina == "📊 Estudio Índices":
 #    st.write(df_componentes.head(10))

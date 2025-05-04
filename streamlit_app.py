@@ -18,32 +18,86 @@ data_tickers_indices = {
     'nombreTicker': ["SyP_500", "IBEX_35", "DAX", "CAC40", "Eurostoxx600", "NASDAQ", "MSCI_China", "MSCI_Alemania"]
 }
 
-data_tickers_bancos = {
-    'ticker': [
-        "HSBA.L",       # HSBC (UK)
-        "SAN.MC",       # Banco Santander (España)
-        "BNP.PA",       # BNP Paribas (Francia)
-        "DBK.DE",       # Deutsche Bank (Alemania)
-        "INGA.AS",      # ING (Países Bajos)
-        "CS.PA",        # Crédit Agricole (Francia)
-        "UBSG.SW",      # UBS (Suiza)
-        "BARC.L",       # Barclays (UK)
-        "ISP.MI",       # Intesa Sanpaolo (Italia)
-        "BBVA.MC",      # BBVA (España)
-        "NDX1.DE",      # Nordea (Finlandia vía Xetra)
-        "DANSKE.CO",    # Danske Bank (Dinamarca)
-        "SWEDAS.XD"      # Swedbank (Suecia)
-    ],
-    'nombreTicker': [
-        "HSBC", "Banco_Santander", "BNP_Paribas", "Deutsche_Bank", "ING", "Credit_Agricole",
-        "UBS", "Barclays", "Intesa_Sanpaolo", "BBVA", "Nordea",
-        "Danske_Bank", "Swedbank"
-    ]
+data_tickers_bancos_por_pais = {
+    "Alemania": {
+        "tickers": ["DBK.DE"],
+        "nombres": ["Deutsche_Bank"]
+    },
+    "Austria": {
+        "tickers": ["BG.VI", "EBS.VI", "RBI.VI"],
+        "nombres": ["BAWAG", "Erste", "Raiffeisen"]
+    },
+    "Bélgica": {
+        "tickers": ["BNB.BR", "KBC.BR"],
+        "nombres": ["BNB", "KBC"]
+    },
+    "Chipre": {
+        "tickers": ["BOCHGR.AT"],
+        "nombres": ["Bank_of_Cyprus"]
+    },
+    "Dinamarca": {
+        "tickers": ["DANSKE.CO"],
+        "nombres": ["Danske_Bank"]
+    },
+    "Eslovenia": {
+        "tickers": ["NLB.IL"],
+        "nombres": ["NLB"]
+    },
+    "España": {
+        "tickers": ["SAN.MC", "BBVA.MC", "CABK.MC", "BKT.MC", "UNI.MC"], 
+        "nombres": ["Banco_Santander", "BBVA", "Caixabank",  "Bankinter", "Unicaja"]
+        # Abanca sigue sin ticker válido
+    },
+    "Finlandia": {
+        "tickers": ["NDA-FI.HE"],
+        "nombres": ["Nordea"]
+    },
+    "Francia": {
+        "tickers": ["BNP.PA", "GLE.PA", "ACA.PA"],
+        "nombres": ["BNP_Paribas", "Societe_Generale", "Credit_Agricole"]
+    },
+    "Grecia": {
+        "tickers": ["ETE.AT", "ALPHA.AT", "EUROB.AT", "TPEIR.AT"],
+        "nombres": ["NBG", "Alpha_Bank", "Eurobank", "Piraeus"]
+    },
+    "Hungría": {
+        "tickers": ["OTP.BD"],
+        "nombres": ["OTP_Bank"]
+    },
+    "Italia": {
+        "tickers": ["ISP.MI", "UCG.MI", "BAMI.MI"],
+        "nombres": ["Intesa_Sanpaolo", "Unicredit", "Banco_BPM"]
+    },
+    "Países Bajos": {
+        "tickers": ["INGA.AS"],
+        "nombres": ["ING"]
+    },
+    "Reino Unido": {
+        "tickers": ["HSBA.L", "BARC.L"],
+        "nombres": ["HSBC", "Barclays"]
+    },
+    "Suecia": {
+        "tickers": ["SWEDAS.XD"],
+        "nombres": ["Swedbank"]
+    },
+    "Suiza": {
+        "tickers": ["UBSG.SW"],
+        "nombres": ["UBS"]
+    }
 }
 
 
+
+
 df_indices = pd.DataFrame(data_tickers_indices)
-df_bancos = pd.DataFrame(data_tickers_bancos)
+
+bancos_lista = []
+for pais, data in data_tickers_bancos_por_pais.items():
+    for ticker, nombre in zip(data["tickers"], data["nombres"]):
+        bancos_lista.append({"pais": pais, "ticker": ticker, "nombreTicker": nombre})
+
+df_bancos = pd.DataFrame(bancos_lista)
+
 
 df_tickers = pd.concat([df_indices, df_bancos], ignore_index=True)
 datos_historicos_dict = {}
@@ -64,34 +118,36 @@ with sqlite3.connect('macroeconomic_data.db', timeout=10, check_same_thread=Fals
 
 
     for ticker, nombre in zip(df_tickers['ticker'], df_tickers['nombreTicker']):
-        # Verificar si la tabla ya existe
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (nombre,))
-        tabla_existe = cursor.fetchone()
+        try:
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (nombre,))
+            tabla_existe = cursor.fetchone()
 
-        if tabla_existe:
-            cursor.execute(f"SELECT MAX(fecha) FROM {nombre}")
-            ultima_fecha_en_db = cursor.fetchone()[0]
-        else:
-            ultima_fecha_en_db = None
+            if tabla_existe:
+                cursor.execute(f"SELECT MAX(fecha) FROM {nombre}")
+                ultima_fecha_en_db = cursor.fetchone()[0]
+            else:
+                ultima_fecha_en_db = None
 
-        # Lógica de descarga
-        if not ultima_fecha_en_db:
-            datos_historicos = yf.Ticker(ticker).history(period="max")
-        else:
-            fecha_inicio = pd.to_datetime(ultima_fecha_en_db) + timedelta(days=1)
-            if fecha_inicio.date() > datetime.today().date():
+            if not ultima_fecha_en_db:
+                datos_historicos = yf.Ticker(ticker).history(period="max")
+            else:
+                fecha_inicio = pd.to_datetime(ultima_fecha_en_db) + timedelta(days=1)
+                if fecha_inicio.date() > datetime.today().date():
+                    continue
+                datos_historicos = yf.Ticker(ticker).history(start=fecha_inicio)
+
+            if datos_historicos.empty:
                 continue
-            datos_historicos = yf.Ticker(ticker).history(start=fecha_inicio)
 
-        if datos_historicos.empty:
-            continue
+            datos_close = datos_historicos[['Close']].reset_index()
+            datos_historicos_dict[f'datosHistoricos_{nombre}'] = datos_close
+        except Exception as e:
+            print(f"❌ Error obteniendo datos para {ticker} ({nombre}): {e}")
 
-        datos_close = datos_historicos[['Close']].reset_index()
-        datos_historicos_dict[f'datosHistoricos_{nombre}'] = datos_close
 
     # Crear tabla de tickers
     cursor.execute('''CREATE TABLE IF NOT EXISTS tickers (ticker TEXT PRIMARY KEY,nombreTicker TEXT)''')
-    data_para_insertar = list(df_tickers.itertuples(index=False, name=None))
+    data_para_insertar = list(df_tickers[['ticker', 'nombreTicker']].itertuples(index=False, name=None))
     cursor.executemany('''INSERT OR REPLACE INTO tickers (ticker, nombreTicker) VALUES (?, ?)''', data_para_insertar)
 
     for nombre in df_tickers['nombreTicker']:
@@ -175,35 +231,79 @@ pagina = st.sidebar.radio("Selecciona una pestaña:", ["📈 Gráficar", "📊 E
 
 if pagina == "📈 Gráficar":
 
-    ## Selección de índices para visualizar
-    #selected_tickers = st.multiselect(
-    #    "Selecciona los índices para visualizar",
-    #    options=df_tickers['nombreTicker'].tolist(),
-    #)
+    st.markdown("""
+    <style>
+    /* Compactar títulos dentro del expander */
+    .streamlit-expanderHeader {
+        font-size: 15px !important;
+        padding: 0.3rem 0.5rem !important;
+    }
+    
+    /* Compactar márgenes y tamaño del nombre del país */
+    div[data-testid="stMarkdownContainer"] p {
+        font-size: 13px !important;
+        margin: 0.1rem 0 0.1rem 0 !important;
+    }
+    
+    /* Ajustar márgenes generales de títulos */
+    h1, h2, h3, h4, h5, h6 {
+        margin-top: 0.2rem !important;
+        margin-bottom: 0.2rem !important;
+        font-size: 14px !important;
+    }
+    
+    /* Reducir espacio vertical de los checkboxes */
+    div[data-testid="stCheckbox"] {
+        padding-top: 0rem !important;
+        padding-bottom: 0rem !important;
+        margin-top: -0.2rem !important;
+        margin-bottom: -0.2rem !important;
+    }
+    
+    /* Separadores finos */
+    hr {
+        margin: 0.3rem 0 !important;
+        border: none;
+        border-top: 1px solid #333;
+    }
+    
+    /* Compactar expander en general */
+    section[role="region"] > div {
+        padding-top: 0.3rem !important;
+        padding-bottom: 0.3rem !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
 
     indices = df_tickers[df_tickers['nombreTicker'].str.contains("SyP|IBEX|DAX|CAC|Eurostoxx|NASDAQ|MSCI")]
     bancos = df_tickers[~df_tickers['nombreTicker'].isin(indices['nombreTicker'])]
-
+    
 
     selected_tickers = []
 
-    with st.expander("Selecciona activos para visualizar"):
-        st.markdown("#### 🧮 Índices")
+    with st.expander("Selecciona Índices para Visualizar"):
         cols_indices = st.columns(4)
         for i, nombre in enumerate(indices['nombreTicker']):
             with cols_indices[i % 4]:
                 if st.checkbox(nombre, key=f"indice_{nombre}"):
                     selected_tickers.append(nombre)
 
-        st.markdown("#### 🏦 Bancos")
-        cols_bancos = st.columns(4)
-        for i, nombre in enumerate(bancos['nombreTicker']):
-            with cols_bancos[i % 4]:
-                if st.checkbox(nombre, key=f"banco_{nombre}"):
-                    selected_tickers.append(nombre)
-
-
-
+    with st.expander("Selecciona Bancos para Visualizar"):
+        for pais in sorted(df_bancos["pais"].unique()):
+            st.markdown(f"**{pais}**")
+            cols = st.columns(4)
+            bancos_pais = df_bancos[df_bancos["pais"] == pais]
+            bancos_pais = bancos_pais.reset_index(drop=True)
+            for i in range(0, len(bancos_pais), 4):
+                cols = st.columns(4)
+                for j in range(4):
+                    if i + j < len(bancos_pais):
+                        row = bancos_pais.iloc[i + j]
+                        with cols[j]:
+                            if st.checkbox(row["nombreTicker"], key=f"banco_{row['nombreTicker']}"):
+                                selected_tickers.append(row["nombreTicker"])
+            st.markdown("<hr style='margin: 0.5rem 0;'>", unsafe_allow_html=True)
     # Aplicamos CSS para cambiar el color de fondo de los contenedores
     st.markdown(
         """
@@ -347,8 +447,22 @@ if pagina == "📈 Gráficar":
 
 
     # Sección Resumen
+    def formatear_miles(valor):
+        if valor in [None, 'N/A']: return "N/A"
+        try:
+            return f"{int(valor):,}".replace(",", ".")
+        except:
+            return "N/A"
+
+    def formatear_decimal(valor, decimales=4):
+        if valor in [None, 'N/A']: return "N/A"
+        try:
+            return f"{valor:.{decimales}f}".replace(".", ",")
+        except:
+            return "N/A"
+
     if selected_tickers:
-        st.markdown("### 📊 Datos Financieros Clave")
+        st.markdown("#### Datos Financieros Clave")
 
         # Estilos CSS para los boxes
         st.markdown("""
@@ -370,37 +484,64 @@ if pagina == "📈 Gráficar":
             .box-item {
                 margin: 5px 0;
                 font-size: 16px;
+                text-align: left;
             }
             </style>
         """, unsafe_allow_html=True)
 
+
+
+
         # Mostrar de a 3 columnas por fila
-        cols = st.columns(3)
+        cols = st.columns(4)
         for i, nombre in enumerate(selected_tickers):
-            col = cols[i % 3]  # seleccionar columna según posición
+            col = cols[i % 4]
 
             ticker_symbol = df_tickers.loc[df_tickers['nombreTicker'] == nombre, 'ticker'].values[0]
             ticker_data = yf.Ticker(ticker_symbol)
 
             try:
-                info = ticker_data.info
-                pb_ratio = info.get('priceToBook', 'N/A')
-                earnings = info.get('netIncomeToCommon', 'N/A')
-                total_assets = info.get('totalAssets', 'N/A')
+                info = ticker_data.info or {}
+                quote_type = info.get("quoteType", "UNKNOWN")
 
-                html_content = f"""
-                <div class='box-container'>
-                    <div class='box-title'>{nombre} ({ticker_symbol})</div>
-                    <div class='box-item'>📘 P/B Ratio: {pb_ratio}</div>
-                    <div class='box-item'>💰 Earnings After Tax: {earnings}</div>
-                    <div class='box-item'>🏦 Total Assets: {total_assets}</div>
-                </div>
-                """
+                # Estructura condicional personalizada
+                if quote_type == "ETF":
+                    tipo_mostrar = "📦 ETF"
+
+                elif quote_type == "INDEX":
+                    tipo_mostrar = "🧱 Índice"
+
+                elif quote_type == "EQUITY":
+                    tipo_mostrar = "🏢 Activo"
+
+                    pb_ratio = formatear_decimal(info.get('priceToBook', 'N/A'))
+                    earnings = formatear_miles(info.get('netIncomeToCommon', 'N/A'))
+                    market_cap = formatear_miles(info.get('marketCap', 'N/A'))
+                    ROA = formatear_decimal(info.get('returnOnAssets', 'N/A'))
+                    ROE = formatear_decimal(info.get('returnOnEquity', 'N/A'))
+
+                    # <div class='box-item'>{tipo_mostrar}</div>
+                    html_content = f"""
+                    <div class='box-container'>
+                        <div class='box-title'>{nombre} ({ticker_symbol})</div>
+                        <div class='box-item'>📘 P/B: {pb_ratio}</div>
+                        <div class='box-item'>💰 BDII: {earnings}</div>
+                        <div class='box-item'>💼 Capitalización: {market_cap}</div>
+                        <div class='box-item'>📈 ROA: {ROA}</div>
+                        <div class='box-item'>📊 ROE: {ROE}</div>
+                    </div>
+                    """
+                    
+                else:
+                    tipo_mostrar = "❓ Otro"
+
+
 
                 col.markdown(html_content, unsafe_allow_html=True)
 
             except Exception as e:
                 col.warning(f"No se pudo obtener información para {nombre}")
+
 
 
 

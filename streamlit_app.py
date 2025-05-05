@@ -83,7 +83,11 @@ data_tickers_bancos_por_pais = {
     "Suiza": {
         "tickers": ["UBSG.SW"],
         "nombres": ["UBS"]
-    }
+    },
+    "USA": {
+        "tickers": ["JPM", "MS", "BAC", "C", "GS", "WFC"],
+        "nombres": ["JPMorgan_Chase", "Morgan_Stanley", "Bank_of_America", "Citigroup", "Goldman_Sachs", "Wells_Fargo"]
+}
 }
 
 
